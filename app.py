@@ -16,7 +16,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
 
 import config
@@ -193,7 +193,12 @@ def _process_webhook(payload: dict) -> None:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/webhook", status_code=200)
-async def webhook(request: Request, background_tasks: BackgroundTasks, body: WebhookPayload = None):
+async def webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_pseudogram_signature: str = Header(default="", description="HMAC-SHA256 signature. Format: sha256=<hex>. Leave blank if API key is not configured."),
+    body: WebhookPayload = None,
+):
     """
     Receive a comment event from PseudoGram.
     Returns 200 immediately; all processing happens in a background task
