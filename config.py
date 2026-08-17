@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_KEY: str = os.getenv("PSEUDOGRAM_API_KEY", "")
+API_KEY: str = os.getenv("PSEUDOGRAM_API_KEY", "").strip()
 BASE_URL: str = "https://pseudogram-api.onrender.com"
 DB_PATH: str = os.getenv("DB_PATH", "linkplease.db")
 

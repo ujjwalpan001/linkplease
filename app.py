@@ -97,11 +97,21 @@ def _now_iso() -> str:
 
 def _verify_signature(raw_body: bytes, header: str) -> bool:
     """Return True if the HMAC-SHA256 signature matches."""
-    if not config.API_KEY:
+    key = config.API_KEY
+    if not key:
+        logger.info("Signature verification skipped (no API key configured)")
         return True  # skip verification when no key is configured (local dev)
     expected = "sha256=" + hmac.new(
-        config.API_KEY.encode(), raw_body, hashlib.sha256
+        key.encode(), raw_body, hashlib.sha256
     ).hexdigest()
+    
+    masked_key = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "too_short"
+    logger.info(
+        f"Signature check: Key len={len(key)} ({masked_key}), "
+        f"body len={len(raw_body)}, "
+        f"header={header}, "
+        f"expected={expected}"
+    )
     return hmac.compare_digest(expected, header)
 
 
