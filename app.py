@@ -341,3 +341,68 @@ def get_logs():
         "memory_logs": list(mem_handler.buffer),
         "debug_logs": DEBUG_LOGS
     }
+
+
+@app.get("/test-sig")
+def test_sig():
+    target = "c542e5d17f6b27029b3730a3b2c10e0dd8a45c7b761cd926a9a2885ce5035575"
+    raw_body_formatted = b'{"event_id": "evt_a47c6a35e78345", "event_type": "comment.created", "sent_at": "2026-08-17T16:45:32.500929+00:00", "data": {"comment_id": "cmt_b1de6c4446", "post_id": "post_4e3498c4b8", "text": "PRICE please", "created_at": "2026-08-17T16:45:32.500933+00:00", "from": {"user_id": "usr_4d9dd230c4", "username": "sahil.340"}}}'
+
+    key = config.API_KEY
+    keys = [
+        ("full_key", key),
+        ("hex_only", key.split(".")[-1] if "." in key else key),
+        ("base64_email", key.split(".")[0] if "." in key else key),
+    ]
+    
+    import base64
+    try:
+        email_part = key.split(".")[0] if "." in key else key
+        # Pad base64 if needed
+        email_part += "=" * ((4 - len(email_part) % 4) % 4)
+        decoded_email = base64.b64decode(email_part).decode('utf-8')
+        keys.append(("email", decoded_email))
+    except Exception as e:
+        logger.error(f"Base64 decode error: {e}")
+
+    results = []
+    
+    parsed = json.loads(raw_body_formatted.decode('utf-8'))
+    compact_body = json.dumps(parsed, separators=(',', ':')).encode('utf-8')
+    
+    def sort_dict(d):
+        if isinstance(d, dict):
+            return {k: sort_dict(v) for k, v in sorted(d.items())}
+        elif isinstance(d, list):
+            return [sort_dict(x) for x in d]
+        return d
+        
+    sorted_compact_body = json.dumps(sort_dict(parsed), separators=(',', ':')).encode('utf-8')
+
+    bodies = [
+        ("raw_formatted", raw_body_formatted),
+        ("compact", compact_body),
+        ("sorted_compact", sorted_compact_body)
+    ]
+    
+    for key_name, key_val in keys:
+        for body_name, body_val in bodies:
+            expected = hmac.new(key_val.encode('utf-8'), body_val, hashlib.sha256).hexdigest()
+            matched = (expected == target)
+            results.append({
+                "key_name": key_name,
+                "key_val": key_val,
+                "body_name": body_name,
+                "expected": expected,
+                "matched": matched
+            })
+            if matched:
+                return {
+                    "status": "MATCH FOUND",
+                    "key_name": key_name,
+                    "body_name": body_name,
+                    "expected": expected
+                }
+
+    return {"status": "NO MATCH", "results": results}
+
