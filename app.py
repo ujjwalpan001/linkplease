@@ -114,7 +114,7 @@ def _verify_signature(raw_body: bytes, header: str) -> bool:
     body_str = raw_body.decode('utf-8', errors='ignore')
     msg = (
         f"Signature check: Key len={len(key)} ({masked_key}), "
-        f"body len={len(raw_body)} ({body_str[:150]}), "
+        f"body len={len(raw_body)} ({body_str}), "
         f"header={header}, "
         f"expected={expected}"
     )
