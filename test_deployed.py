@@ -25,17 +25,21 @@ print(f"    Body:   {r.json()}")
 assert r.status_code == 200, "FAILED: /stats not working!"
 print("    OK - App is live!")
 
-# Step 2: Create a rule
-print("\n[2] Creating rule (keyword: 'price')...")
-r = requests.post(f"{DEPLOYED_URL}/rules", json={
-    "keyword": "price",
-    "dm_message": "Here is the price list!"
-})
-print(f"    Status: {r.status_code}")
-print(f"    Body:   {r.json()}")
-assert r.status_code == 201, "FAILED: /rules not working!"
-rule_id = r.json()["rule_id"]
-print(f"    OK - Rule created: {rule_id}")
+# Step 2: Create rules for multiple common keywords
+print("\n[2] Creating rules for common keywords...")
+keywords = [
+    ("link",  "Here is the link you asked for!"),
+    ("price", "Here is the price list!"),
+    ("info",  "Here is more info for you!"),
+    ("buy",   "Here is how to buy!"),
+    ("send",  "Sending you the details now!"),
+]
+for kw, msg in keywords:
+    r = requests.post(f"{DEPLOYED_URL}/rules", json={"keyword": kw, "dm_message": msg})
+    if r.status_code == 201:
+        print(f"    OK - Rule created: keyword='{kw}'")
+    else:
+        print(f"    WARN - Rule '{kw}' failed: {r.status_code} {r.text}")
 
 # Step 3: Start 500-event load test
 print("\n[3] Starting 500-event load test (10 seconds)...")

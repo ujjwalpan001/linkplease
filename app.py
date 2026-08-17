@@ -193,34 +193,17 @@ def _process_webhook(payload: dict) -> None:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.post("/webhook", status_code=200)
-async def webhook(request: Request, background_tasks: BackgroundTasks):
+async def webhook(request: Request, background_tasks: BackgroundTasks, body: WebhookPayload = None):
     """
     Receive a comment event from PseudoGram.
     Returns 200 immediately; all processing happens in a background task
     so we never block longer than the signature check (~1 ms).
 
-    **Example — comment.created:**
-    ```json
-    {
-      "event_id": "evt-001",
-      "event_type": "comment.created",
-      "data": {
-        "comment_id": "cmt-001",
-        "text": "send me the link please!",
-        "from": { "user_id": "user-123" }
-      }
-    }
-    ```
-
-    **Example — comment.deleted:**
-    ```json
-    {
-      "event_id": "evt-002",
-      "event_type": "comment.deleted",
-      "data": { "comment_id": "cmt-001" }
-    }
-    ```
+    **Signature:** Production requests include `X-PseudoGram-Signature: sha256=<hex>` header.
+    Leave blank for local testing (signature check is skipped when API key is not configured).
     """
+    # Starlette caches the body after first read, so this works correctly
+    # alongside the Pydantic body parameter above.
     raw_body = await request.body()
 
     # Part B — reject forged requests
@@ -289,3 +272,9 @@ def get_stats() -> dict:
         "queued": queued,
         "duplicates_blocked": duplicates_blocked,
     }
+
+
+@app.get("/")
+def health_check():
+    """Render health check endpoint."""
+    return {"status": "ok"}
