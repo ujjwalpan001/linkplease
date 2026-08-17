@@ -11,6 +11,7 @@ GET  /stats    — live delivery numbers
 import collections
 import hashlib
 import hmac
+import json
 import logging
 import sqlite3
 import uuid
@@ -106,21 +107,38 @@ def _verify_signature(raw_body: bytes, header: str) -> bool:
         logger.info(msg)
         return True  # skip verification when no key is configured (local dev)
     
-    expected = "sha256=" + hmac.new(
+    # Calculate signature on raw body
+    expected_raw = "sha256=" + hmac.new(
         key.encode(), raw_body, hashlib.sha256
     ).hexdigest()
     
+    # Calculate signature on compact body (no spaces) to handle potential serialization mismatch
+    expected_compact = ""
+    try:
+        parsed = json.loads(raw_body.decode('utf-8'))
+        compact_bytes = json.dumps(parsed, separators=(',', ':')).encode('utf-8')
+        expected_compact = "sha256=" + hmac.new(
+            key.encode(), compact_bytes, hashlib.sha256
+        ).hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to parse body for compact signature check: {e}")
+        
     masked_key = f"{key[:6]}...{key[-6:]}" if len(key) > 12 else "too_short"
     body_str = raw_body.decode('utf-8', errors='ignore')
     msg = (
         f"Signature check: Key len={len(key)} ({masked_key}), "
         f"body len={len(raw_body)} ({body_str}), "
         f"header={header}, "
-        f"expected={expected}"
+        f"expected_raw={expected_raw}, "
+        f"expected_compact={expected_compact}"
     )
     DEBUG_LOGS.append(msg)
     logger.warning(msg)
-    return hmac.compare_digest(expected, header)
+    
+    # Match either raw or compact signature
+    match_raw = hmac.compare_digest(expected_raw, header)
+    match_compact = expected_compact and hmac.compare_digest(expected_compact, header)
+    return bool(match_raw or match_compact)
 
 
 # ── Background task (runs after 200 is returned) ──────────────────────────────
