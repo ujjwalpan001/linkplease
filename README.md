@@ -1,5 +1,36 @@
 # LinkPlease
 
+> [!IMPORTANT]
+> **Render Free Tier Deployment:** The application is hosted on Render's free tier. If the service has spun down due to inactivity, it may take 50+ seconds to wake up on the first request.
+
+## 🚀 Deployed System & Live URLs
+
+- **Deployed Swagger UI (API Docs):** [https://linkplease-s85d.onrender.com/docs](https://linkplease-s85d.onrender.com/docs)
+- **Simulator Swagger UI:** [https://pseudogram-api.onrender.com/docs](https://pseudogram-api.onrender.com/docs)
+- **Live Stats Page:** [https://linkplease-s85d.onrender.com/stats](https://linkplease-s85d.onrender.com/stats)
+- **Loom Walkthrough Video:** [https://www.loom.com/share/b2d3dfbf835e477da2fb33e5cb602a5b](https://www.loom.com/share/b2d3dfbf835e477da2fb33e5cb602a5b)
+
+To run the automated tests against this deployed environment, open your terminal next to the browser and run:
+```bash
+python test_deployed.py
+```
+
+## 📝 Submission Metadata
+
+```json
+{
+  "email": "pandey_ujjawal@srmap.edu.in",
+  "api_key": "dXp3YWxwYW5kZXlAZ21haWwuY29t.1db5e4bc825d037cb2d1",
+  "github_repo": "https://github.com/ujjwalpan001/linkplease",
+  "working_url": "https://linkplease-s85d.onrender.com",
+  "loom_url": "https://www.loom.com/share/b2d3dfbf835e477da2fb33e5cb602a5b",
+  "parts_completed": "A+B+C",
+  "start_date": "5th august 2026"
+}
+```
+
+---
+
 Automates Instagram DMs: when a comment matches a keyword, the commenter gets a DM — exactly once.
 
 Built for the LinkPlease intern assignment. Covers Parts A + B + C.
