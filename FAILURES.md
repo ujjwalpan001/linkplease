@@ -36,8 +36,8 @@ Every way this system can still lose a DM, send a duplicate, or report a wrong n
 
 ---
 
-## 5. Token bucket resets on process restart
+## 5. Sliding window rate limiter resets on process restart
 
-**Condition:** The token bucket is in-memory. If the process restarts with 3 tokens remaining (7 calls made in the current window), the bucket resets to 10 tokens. This could briefly allow up to 17 calls before the next window ends, potentially breaching the rolling rate limit.
+**Condition:** The sliding window rate limiter (`SlidingWindowRateLimiter`) is in-memory. It tracks call timestamps in a deque. If the process restarts with 7 calls recorded in the current 60-second window (3 remaining), the deque resets to empty — giving a fresh 10-call budget. This could briefly allow up to 17 calls before the window naturally expires, potentially breaching the rolling rate limit.
 
-**Likelihood:** Only on restart during an active burst. The API's 429 response acts as a corrective backstop.
+**Likelihood:** Only during restarts within an active burst. The API's 429 response and `Retry-After` header act as a corrective backstop.

@@ -4,13 +4,15 @@ Background DM sender worker.
 Runs as a single daemon thread so rate-limit accounting is trivially correct:
 one thread = one rate-limit context, no need for a shared semaphore.
 
-Token bucket:
-  - Capacity: 10 tokens
-  - Refills fully every 60 seconds
-  - One token consumed per API call
+Rate limiter: true sliding window (not a simple token bucket).
+  - Tracks timestamps of the last N calls in a deque
+  - Before each call, evicts timestamps older than 60s
+  - If len(deque) >= 10, sleeps until the oldest timestamp falls out
+  - This prevents the double-burst problem at refill boundaries
   - On API 429: additionally sleeps Retry-After seconds
 """
 
+import collections
 import logging
 import sqlite3
 import time
@@ -25,30 +27,41 @@ import db
 logger = logging.getLogger(__name__)
 
 
-class TokenBucket:
-    """Thread-safe token bucket."""
+class SlidingWindowRateLimiter:
+    """
+    True sliding-window rate limiter.
 
-    def __init__(self, capacity: int, refill_period: float):
-        self.capacity = capacity
-        self.tokens = float(capacity)
-        self.refill_period = refill_period
-        self.last_refill = time.monotonic()
+    Tracks call timestamps in a deque. Before each call:
+      1. Evict timestamps older than WINDOW seconds.
+      2. If count >= LIMIT, sleep until the oldest timestamp ages out.
+      3. Record the new call timestamp.
+
+    This guarantees at most LIMIT calls in any rolling WINDOW-second period,
+    unlike a token bucket which can allow 2×LIMIT calls at a refill boundary.
+    """
+
+    def __init__(self, limit: int, window: float):
+        self.limit = limit
+        self.window = window
+        self._calls: collections.deque[float] = collections.deque()
         self._lock = threading.Lock()
 
     def wait_and_consume(self) -> None:
-        """Block until a token is available, then consume it."""
+        """Block until a call is allowed within the sliding window, then record it."""
         while True:
             with self._lock:
                 now = time.monotonic()
-                elapsed = now - self.last_refill
-                if elapsed >= self.refill_period:
-                    self.tokens = self.capacity
-                    self.last_refill = now
-                if self.tokens >= 1:
-                    self.tokens -= 1
+                # Evict timestamps outside the rolling window
+                while self._calls and now - self._calls[0] >= self.window:
+                    self._calls.popleft()
+
+                if len(self._calls) < self.limit:
+                    self._calls.append(now)
                     return
-                wait = self.refill_period - elapsed
-            time.sleep(min(wait, 1.0))
+
+                # Sleep until the oldest call falls out of the window
+                sleep_for = self.window - (now - self._calls[0]) + 0.01
+            time.sleep(max(sleep_for, 0.1))
 
 
 def _future_iso(seconds: float) -> str:
@@ -61,7 +74,7 @@ def _now_iso() -> str:
 
 class DMWorker:
     def __init__(self):
-        self._bucket = TokenBucket(config.RATE_LIMIT_CALLS, config.RATE_LIMIT_WINDOW)
+        self._bucket = SlidingWindowRateLimiter(config.RATE_LIMIT_CALLS, config.RATE_LIMIT_WINDOW)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True, name="dm-worker")
 

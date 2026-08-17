@@ -53,6 +53,18 @@ app = FastAPI(title="LinkPlease", version="1.0.0", lifespan=lifespan)
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
+class WebhookData(BaseModel):
+    comment_id: str = ""
+    text: str = ""
+    from_user: dict = {}
+
+
+class WebhookPayload(BaseModel):
+    event_id: str
+    event_type: str  # "comment.created" or "comment.deleted"
+    data: dict = {}
+
+
 class RuleIn(BaseModel):
     keyword: str
     dm_message: str
@@ -186,6 +198,28 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
     Receive a comment event from PseudoGram.
     Returns 200 immediately; all processing happens in a background task
     so we never block longer than the signature check (~1 ms).
+
+    **Example — comment.created:**
+    ```json
+    {
+      "event_id": "evt-001",
+      "event_type": "comment.created",
+      "data": {
+        "comment_id": "cmt-001",
+        "text": "send me the link please!",
+        "from": { "user_id": "user-123" }
+      }
+    }
+    ```
+
+    **Example — comment.deleted:**
+    ```json
+    {
+      "event_id": "evt-002",
+      "event_type": "comment.deleted",
+      "data": { "comment_id": "cmt-001" }
+    }
+    ```
     """
     raw_body = await request.body()
 
