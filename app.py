@@ -111,9 +111,10 @@ def _verify_signature(raw_body: bytes, header: str) -> bool:
     ).hexdigest()
     
     masked_key = f"{key[:6]}...{key[-6:]}" if len(key) > 12 else "too_short"
+    body_str = raw_body.decode('utf-8', errors='ignore')
     msg = (
         f"Signature check: Key len={len(key)} ({masked_key}), "
-        f"body len={len(raw_body)}, "
+        f"body len={len(raw_body)} ({body_str[:150]}), "
         f"header={header}, "
         f"expected={expected}"
     )
