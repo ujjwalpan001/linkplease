@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 worker = DMWorker()
 reconciler = Reconciler()
+DEBUG_LOGS = []
+
 
 
 @asynccontextmanager
@@ -99,19 +101,24 @@ def _verify_signature(raw_body: bytes, header: str) -> bool:
     """Return True if the HMAC-SHA256 signature matches."""
     key = config.API_KEY
     if not key:
-        logger.info("Signature verification skipped (no API key configured)")
+        msg = "Signature check: API key not configured, skipping check"
+        DEBUG_LOGS.append(msg)
+        logger.info(msg)
         return True  # skip verification when no key is configured (local dev)
+    
     expected = "sha256=" + hmac.new(
         key.encode(), raw_body, hashlib.sha256
     ).hexdigest()
     
-    masked_key = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else "too_short"
-    logger.info(
+    masked_key = f"{key[:6]}...{key[-6:]}" if len(key) > 12 else "too_short"
+    msg = (
         f"Signature check: Key len={len(key)} ({masked_key}), "
         f"body len={len(raw_body)}, "
         f"header={header}, "
         f"expected={expected}"
     )
+    DEBUG_LOGS.append(msg)
+    logger.warning(msg)
     return hmac.compare_digest(expected, header)
 
 
@@ -311,4 +318,7 @@ def health_check():
 @app.get("/logs")
 def get_logs():
     """Expose recent application logs."""
-    return list(mem_handler.buffer)
+    return {
+        "memory_logs": list(mem_handler.buffer),
+        "debug_logs": DEBUG_LOGS
+    }
