@@ -165,7 +165,7 @@ class DMWorker:
             self._reschedule(conn, row["id"], attempts, now)
             return
 
-        if resp.status_code == 202:
+        if resp.status_code in (200, 202):
             dm_id = resp.json().get("dm_id")
             conn.execute(
                 "UPDATE dm_queue SET status='accepted', dm_id=?, attempts=?, updated_at=? WHERE id=?",
