@@ -8,6 +8,7 @@ POST /rules    — create a keyword → DM rule
 GET  /stats    — live delivery numbers
 """
 
+import base64
 import collections
 import hashlib
 import hmac
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 worker = DMWorker()
 reconciler = Reconciler()
-DEBUG_LOGS = []
+
 
 
 
@@ -102,43 +103,29 @@ def _verify_signature(raw_body: bytes, header: str) -> bool:
     """Return True if the HMAC-SHA256 signature matches."""
     key = config.API_KEY
     if not key:
-        msg = "Signature check: API key not configured, skipping check"
-        DEBUG_LOGS.append(msg)
-        logger.info(msg)
         return True  # skip verification when no key is configured (local dev)
     
-    # Calculate signature on raw body
-    expected_raw = "sha256=" + hmac.new(
-        key.encode(), raw_body, hashlib.sha256
+    # The mock API server signs the webhook using the base64-decoded email part
+    # of the API key as the secret (e.g. "uxwalpandey@gmail.com").
+    try:
+        email_part = key.split(".")[0] if "." in key else key
+        email_part += "=" * ((4 - len(email_part) % 4) % 4)
+        secret = base64.b64decode(email_part).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error decoding API key email part: {e}")
+        secret = key  # fallback
+        
+    expected = "sha256=" + hmac.new(
+        secret.encode('utf-8'), raw_body, hashlib.sha256
     ).hexdigest()
     
-    # Calculate signature on compact body (no spaces) to handle potential serialization mismatch
-    expected_compact = ""
-    try:
-        parsed = json.loads(raw_body.decode('utf-8'))
-        compact_bytes = json.dumps(parsed, separators=(',', ':')).encode('utf-8')
-        expected_compact = "sha256=" + hmac.new(
-            key.encode(), compact_bytes, hashlib.sha256
-        ).hexdigest()
-    except Exception as e:
-        logger.error(f"Failed to parse body for compact signature check: {e}")
-        
-    masked_key = f"{key[:6]}...{key[-6:]}" if len(key) > 12 else "too_short"
-    body_str = raw_body.decode('utf-8', errors='ignore')
-    msg = (
-        f"Signature check: Key len={len(key)} ({masked_key}), "
-        f"body len={len(raw_body)} ({body_str}), "
-        f"header={header}, "
-        f"expected_raw={expected_raw}, "
-        f"expected_compact={expected_compact}"
-    )
-    DEBUG_LOGS.append(msg)
-    logger.warning(msg)
-    
-    # Match either raw or compact signature
-    match_raw = hmac.compare_digest(expected_raw, header)
-    match_compact = expected_compact and hmac.compare_digest(expected_compact, header)
-    return bool(match_raw or match_compact)
+    match = hmac.compare_digest(expected, header)
+    if not match:
+        logger.warning(
+            f"Signature check failed. Header: {header}, "
+            f"Expected: {expected} (computed using secret: {secret})"
+        )
+    return match
 
 
 # ── Background task (runs after 200 is returned) ──────────────────────────────
@@ -337,72 +324,5 @@ def health_check():
 @app.get("/logs")
 def get_logs():
     """Expose recent application logs."""
-    return {
-        "memory_logs": list(mem_handler.buffer),
-        "debug_logs": DEBUG_LOGS
-    }
-
-
-@app.get("/test-sig")
-def test_sig():
-    target = "c542e5d17f6b27029b3730a3b2c10e0dd8a45c7b761cd926a9a2885ce5035575"
-    raw_body_formatted = b'{"event_id": "evt_a47c6a35e78345", "event_type": "comment.created", "sent_at": "2026-08-17T16:45:32.500929+00:00", "data": {"comment_id": "cmt_b1de6c4446", "post_id": "post_4e3498c4b8", "text": "PRICE please", "created_at": "2026-08-17T16:45:32.500933+00:00", "from": {"user_id": "usr_4d9dd230c4", "username": "sahil.340"}}}'
-
-    key = config.API_KEY
-    keys = [
-        ("full_key", key),
-        ("hex_only", key.split(".")[-1] if "." in key else key),
-        ("base64_email", key.split(".")[0] if "." in key else key),
-    ]
-    
-    import base64
-    try:
-        email_part = key.split(".")[0] if "." in key else key
-        # Pad base64 if needed
-        email_part += "=" * ((4 - len(email_part) % 4) % 4)
-        decoded_email = base64.b64decode(email_part).decode('utf-8')
-        keys.append(("email", decoded_email))
-    except Exception as e:
-        logger.error(f"Base64 decode error: {e}")
-
-    results = []
-    
-    parsed = json.loads(raw_body_formatted.decode('utf-8'))
-    compact_body = json.dumps(parsed, separators=(',', ':')).encode('utf-8')
-    
-    def sort_dict(d):
-        if isinstance(d, dict):
-            return {k: sort_dict(v) for k, v in sorted(d.items())}
-        elif isinstance(d, list):
-            return [sort_dict(x) for x in d]
-        return d
-        
-    sorted_compact_body = json.dumps(sort_dict(parsed), separators=(',', ':')).encode('utf-8')
-
-    bodies = [
-        ("raw_formatted", raw_body_formatted),
-        ("compact", compact_body),
-        ("sorted_compact", sorted_compact_body)
-    ]
-    
-    for key_name, key_val in keys:
-        for body_name, body_val in bodies:
-            expected = hmac.new(key_val.encode('utf-8'), body_val, hashlib.sha256).hexdigest()
-            matched = (expected == target)
-            results.append({
-                "key_name": key_name,
-                "key_val": key_val,
-                "body_name": body_name,
-                "expected": expected,
-                "matched": matched
-            })
-            if matched:
-                return {
-                    "status": "MATCH FOUND",
-                    "key_name": key_name,
-                    "body_name": body_name,
-                    "expected": expected
-                }
-
-    return {"status": "NO MATCH", "results": results}
+    return list(mem_handler.buffer)
 
