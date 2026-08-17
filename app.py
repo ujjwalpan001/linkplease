@@ -8,6 +8,7 @@ POST /rules    — create a keyword → DM rule
 GET  /stats    — live delivery numbers
 """
 
+import collections
 import hashlib
 import hmac
 import logging
@@ -23,6 +24,18 @@ import config
 import db
 from reconciler import Reconciler
 from worker import DMWorker
+
+# In-memory logging buffer to debug deployed app
+class MemoryHandler(logging.Handler):
+    def __init__(self, capacity=200):
+        super().__init__()
+        self.buffer = collections.deque(maxlen=capacity)
+    def emit(self, record):
+        self.buffer.append(self.format(record))
+
+mem_handler = MemoryHandler()
+mem_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s"))
+logging.getLogger().addHandler(mem_handler)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -283,3 +296,9 @@ def get_stats() -> dict:
 def health_check():
     """Render health check endpoint."""
     return {"status": "ok"}
+
+
+@app.get("/logs")
+def get_logs():
+    """Expose recent application logs."""
+    return list(mem_handler.buffer)
